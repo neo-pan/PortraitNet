@@ -1,0 +1,7 @@
+__pycache__/
+exp/
+data/EG1800/
+data/Supervisely_face/
+ref*/
+
+*.zip

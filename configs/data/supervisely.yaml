@@ -1,0 +1,24 @@
+batch_size: 64
+
+task: 'seg'
+datasetlist: ['supervisely_face_easy']
+data_root: ${paths.root_dir}/data/
+file_root: ${paths.root_dir}/data/select_data/
+dataset: null
+num_workers: 64
+pin_memory: True
+
+istrain: True
+addEdge: True
+stability: True
+
+video: False
+prior_prob: 0.5
+
+input_height: 224
+input_width: 224
+
+padding_color: 128
+img_scale: 1
+img_mean: [103.94, 116.78, 123.68]
+img_val: [0.017, 0.017, 0.017]
