@@ -12,10 +12,6 @@ import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 from PIL import Image, ImageEnhance, ImageOps, ImageFile  
 
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from pycocotools import mask as maskUtils
-
 # global parameter
 set_ratio = 0.5
 
@@ -47,34 +43,6 @@ def show_edge(mask_ori):
     return myImg
 
 # ===================== load mask =====================
-def annToRLE(anno, height, width):
-    """
-    Convert annotation which can be polygons, uncompressed RLE to RLE.
-    :return: binary mask (numpy 2D array)
-    """
-    segm = anno['segmentation']
-    if isinstance(segm, list):
-        # polygon -- a single object might consist of multiple parts
-        # we merge all parts into one mask rle code
-        rles = maskUtils.frPyObjects(segm, height, width)
-        rle = maskUtils.merge(rles)
-    elif isinstance(segm['counts'], list):
-        # uncompressed RLE
-        rle = maskUtils.frPyObjects(segm, height, width)
-    else:
-        # rle
-        rle = anno['segmentation']
-    return rle
-
-def annToMask(anno, height, width):
-    """
-    Convert annotation which can be polygons, uncompressed RLE, or RLE to binary mask.
-    :return: binary mask (numpy 2D array)
-    """
-    rle = annToRLE(anno, height, width)
-    mask = maskUtils.decode(rle)
-    return mask
-
 def base64_2_mask(s):
     z = zlib.decompress(base64.b64decode(s))
     n = np.fromstring(z, np.uint8)

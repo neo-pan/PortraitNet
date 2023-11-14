@@ -120,7 +120,7 @@ class Encoder(nn.Module):
 
         return feature2x, feature4x, feature8x, feature16x, feature32x
 
-class PortrainNet(nn.Module):
+class PortrainNetMobileNetV2(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args

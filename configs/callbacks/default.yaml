@@ -19,3 +19,7 @@ model_checkpoint:
 
 model_summary:
   max_depth: -1
+
+lr_monitor:
+  _target_: lightning.pytorch.callbacks.LearningRateMonitor
+  logging_interval: epoch

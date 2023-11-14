@@ -4,14 +4,14 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: eg1800
-  - override /model: mobilenetv2
+  - override /data: supervisely
+  - override /model: mobilenetv3
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["eg1800", "mobilenetv2", "not_pretrained"]
+tags: ["supervisely", "mobilenetv3", "not_pretrained", "boundary_loss", "consistency_loss"]
 
 trainer:
   min_epochs: 1
@@ -19,7 +19,10 @@ trainer:
   check_val_every_n_epoch: 10
 
 model:
-  pretrained: False
+  pretrained: false
+  use_boundary_loss: true
+  use_consistency_loss: true
+  compile: true
 
 data:
-  batch_size: 128
+  batch_size: 64

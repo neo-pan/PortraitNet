@@ -6,20 +6,23 @@ import torch.utils.data as data
 import lightning as L
 from torchmetrics.classification import BinaryJaccardIndex
 
-from portrain_net_mobilenetv2 import PortrainNet
+from model import PortrainNetMobileNetV2, PortrainNetMobileNetV3
 from util import FocalLoss, ConsistencyLoss
 from data.data_aug import Anti_Normalize_Img
 from data.datasets import Human
-from model.model_mobilenetv2_seg_small import MobileNetV2
 
 
 class PortraitNetModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
+        self.hparams.update(args)
         self.save_hyperparameters(logger=False)
-
-        # self.model = PortrainNet(args)
-        self.model = MobileNetV2(addEdge=True)
+        if args.model == "mobilenetv2":
+            self.model = PortrainNetMobileNetV2(args)
+        elif args.model == "mobilenetv3":
+            self.model = PortrainNetMobileNetV3(args)
+        else:
+            raise NotImplementedError(f"Model {args.model} not implemented.")
 
         self.cross_entropy = nn.CrossEntropyLoss(ignore_index=255)
         self.focal_loss = FocalLoss(gamma=args.focal_gamma, alpha=args.focal_alpha)
@@ -28,11 +31,8 @@ class PortraitNetModule(L.LightningModule):
         self.val_acc = BinaryJaccardIndex(threshold=0.5)
         self.test_acc = BinaryJaccardIndex(threshold=0.5)
 
-        self.init_lr = args.optimizer.lr
-        self.weight_decay = args.optimizer.weight_decay
-
     def setup(self, stage: str) -> None:
-        if self.hparams.args.compile and stage == "fit":
+        if self.hparams.compile and stage == "fit":
             self.model = torch.compile(self.model)
 
     def on_train_start(self) -> None:
@@ -48,20 +48,20 @@ class PortraitNetModule(L.LightningModule):
         mask_logits, boundary_logits = self.forward(input_aug)
 
         loss_mask = self.cross_entropy(mask_logits, mask)
-        if self.hparams.args.use_boundary_loss:
+        if self.hparams.use_boundary_loss:
             loss_boundary = (
                 self.focal_loss(boundary_logits, boundary)
-                * self.hparams.args.boundary_weight
+                * self.hparams.boundary_weight
             )
         else:
             loss_boundary = 0.0
 
-        if self.hparams.args.use_consistency_loss:
+        if self.hparams.use_consistency_loss:
             mask_ori_logits, _ = self.forward(input_ori)
             loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
             loss_consistency = (
                 self.consistency_loss(mask_logits, mask_ori_logits.detach())
-                * self.hparams.args.consistency_weight
+                * self.hparams.consistency_weight
             )
         else:
             loss_mask_ori = 0.0
@@ -85,18 +85,24 @@ class PortraitNetModule(L.LightningModule):
         mask_logits, boundary_logits = self.forward(input_aug)
 
         loss_mask = self.cross_entropy(mask_logits, mask)
-        loss_boundary = (
-            self.focal_loss(boundary_logits, boundary)
-            * self.hparams.args.boundary_weight
-        )
+        if self.hparams.use_boundary_loss:
+            loss_boundary = (
+                self.focal_loss(boundary_logits, boundary)
+                * self.hparams.boundary_weight
+            )
+        else:
+            loss_boundary = 0.0
 
-        mask_ori_logits, boundary_ori_logits = self.forward(input_ori)
-
-        loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
-        loss_consistency = (
-            self.consistency_loss(mask_logits, mask_ori_logits)
-            * self.hparams.args.consistency_weight
-        )
+        if self.hparams.use_consistency_loss:
+            mask_ori_logits, boundary_ori_logits = self.forward(input_ori)
+            loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
+            loss_consistency = (
+                self.consistency_loss(mask_logits, mask_ori_logits.detach())
+                * self.hparams.consistency_weight
+            )
+        else:
+            loss_mask_ori = 0.0
+            loss_consistency = 0.0
 
         loss = loss_mask + loss_mask_ori + loss_boundary + loss_consistency
 
@@ -112,6 +118,23 @@ class PortraitNetModule(L.LightningModule):
         self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
         # log several images
         if self.logger is not None and self.logger.experiment is not None:
+            if self.hparams.use_consistency_loss:
+                self.logger.experiment.add_images(
+                    f"val/mask_ori_{batch_idx}",
+                    self.mask2image(mask_ori_logits),
+                    self.current_epoch,
+                )
+                self.logger.experiment.add_images(
+                    f"val/boundary_ori_{batch_idx}",
+                    self.boundary2image(boundary_ori_logits),
+                    self.current_epoch,
+                )
+            if self.hparams.use_boundary_loss:
+                self.logger.experiment.add_images(
+                    f"val/boundary_aug_{batch_idx}",
+                    self.boundary2image(boundary_logits),
+                    self.current_epoch,
+                )
             self.logger.experiment.add_images(
                 f"val/input_ori_{batch_idx}",
                 self.tensor2image(input_ori),
@@ -128,11 +151,6 @@ class PortraitNetModule(L.LightningModule):
                 self.current_epoch,
             )
             self.logger.experiment.add_images(
-                f"val/mask_ori_{batch_idx}",
-                self.mask2image(mask_ori_logits),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
                 f"val/mask_aug_{batch_idx}",
                 self.mask2image(mask_logits),
                 self.current_epoch,
@@ -140,16 +158,6 @@ class PortraitNetModule(L.LightningModule):
             self.logger.experiment.add_images(
                 f"val/true_boundary_{batch_idx}",
                 self.label2image(boundary),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/boundary_aug_{batch_idx}",
-                self.boundary2image(boundary_logits),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/boundary_ori_{batch_idx}",
-                self.boundary2image(boundary_ori_logits),
                 self.current_epoch,
             )
 
@@ -160,18 +168,24 @@ class PortraitNetModule(L.LightningModule):
         mask_logits, boundary_logits = self.forward(input_aug)
 
         loss_mask = self.cross_entropy(mask_logits, mask)
-        loss_boundary = (
-            self.focal_loss(boundary_logits, boundary)
-            * self.hparams.args.boundary_weight
-        )
+        if self.hparams.use_boundary_loss:
+            loss_boundary = (
+                self.focal_loss(boundary_logits, boundary)
+                * self.hparams.boundary_weight
+            )
+        else:
+            loss_boundary = 0.0
 
-        mask_ori_logits, boundary_ori_logits = self.forward(input_ori)
-
-        loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
-        loss_consistency = (
-            self.consistency_loss(mask_logits, mask_ori_logits)
-            * self.hparams.args.consistency_weight
-        )
+        if self.hparams.use_consistency_loss:
+            mask_ori_logits, _ = self.forward(input_ori)
+            loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
+            loss_consistency = (
+                self.consistency_loss(mask_logits, mask_ori_logits.detach())
+                * self.hparams.consistency_weight
+            )
+        else:
+            loss_mask_ori = 0.0
+            loss_consistency = 0.0
 
         loss = loss_mask + loss_mask_ori + loss_boundary + loss_consistency
 
@@ -191,7 +205,11 @@ class PortraitNetModule(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.init_lr, weight_decay=self.weight_decay)
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.hparams.optimizer.lr,
+            weight_decay=self.hparams.optimizer.weight_decay,
+        )
 
         return [optimizer], [self.get_lr_scheduler(optimizer)]
 
@@ -199,7 +217,7 @@ class PortraitNetModule(L.LightningModule):
         return torch.optim.lr_scheduler.LambdaLR(optimizer, self.lr_lambda)
 
     def lr_lambda(self, epoch):
-        return self.init_lr * (0.95 ** (epoch // 20))
+        return 0.95 ** (epoch // 20)
 
     def tensor2image(self, tensor):
         image = np.uint8(

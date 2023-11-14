@@ -1,0 +1,28 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: supervisely
+  - override /model: mobilenetv2
+  - override /trainer: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["supervisely", "mobilenetv2", "not_pretrained", "boundary_loss", "consistency_loss"]
+
+trainer:
+  min_epochs: 1
+  max_epochs: 2000
+  check_val_every_n_epoch: 10
+
+model:
+  pretrained: false
+  use_boundary_loss: true
+  use_consistency_loss: true
+  compile: true
+
+data:
+  batch_size: 64
