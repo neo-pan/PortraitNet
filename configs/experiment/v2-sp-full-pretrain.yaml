@@ -23,6 +23,7 @@ model:
   use_boundary_loss: true
   use_consistency_loss: true
   compile: true
+  freeze: true
 
 data:
   batch_size: 64

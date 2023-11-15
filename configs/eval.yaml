@@ -10,6 +10,8 @@ defaults:
   - extras: default
   - hydra: default
 
+  - experiment: null
+
 task_name: "eval"
 
 tags: ["dev"]

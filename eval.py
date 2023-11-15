@@ -2,14 +2,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
 import lightning as L
-import rootutils
 import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-import data
-from lightning_modules import PortraitNetModule
+from lightning_modules import PortraitNetModule, PortraitDataModule
 
 from util import (
     RankedLogger,
@@ -38,7 +36,7 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     assert cfg.ckpt_path
 
     log.info(f"Instantiating datamodule <PortraitDataModule>")
-    datamodule: LightningDataModule = data.PortraitDataModule(cfg.data)
+    datamodule: LightningDataModule = PortraitDataModule(cfg.data)
 
     log.info(f"Instantiating model <PortraitNetModule>")
     model: LightningModule = PortraitNetModule(cfg.model)

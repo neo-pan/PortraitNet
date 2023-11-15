@@ -15,7 +15,7 @@ tags: ["supervisely", "mobilenetv3", "not_pretrained", "boundary_loss", "consist
 
 trainer:
   min_epochs: 1
-  max_epochs: 2000
+  max_epochs: 500
   check_val_every_n_epoch: 10
 
 model:

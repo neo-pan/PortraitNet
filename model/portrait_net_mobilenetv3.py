@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchvision.models import mobilenet_v2
+from torchvision.models import mobilenet_v3_large
 
 import numpy as np
         
@@ -69,17 +69,16 @@ class Encoder(nn.Module):
         [14, 14]
         [14, 14]
         [14, 14]
-        [14, 14]
         [7, 7]
         [7, 7]
         [7, 7]
         [7, 7]
         '''
-        mobilenet = mobilenet_v2(pretrained=args.pretrained)
+        mobilenet = mobilenet_v3_large(pretrained=args.pretrained)
         if args.freeze:
             for param in mobilenet.parameters():
                 param.requires_grad = False
-
+    
         self.out_channels = []
 
         self.down2x = mobilenet.features[0:2]
@@ -91,11 +90,11 @@ class Encoder(nn.Module):
         self.down8x = mobilenet.features[4:7]
         self.out_channels.append(mobilenet.features[6].out_channels)
 
-        self.down16x = mobilenet.features[7:14]
-        self.out_channels.append(mobilenet.features[13].out_channels)
+        self.down16x = mobilenet.features[7:13]
+        self.out_channels.append(mobilenet.features[12].out_channels)
 
-        self.down32x = mobilenet.features[14:18]
-        self.out_channels.append(mobilenet.features[17].out_channels)
+        self.down32x = mobilenet.features[13:17]
+        self.out_channels.append(mobilenet.features[16].out_channels)
 
         del mobilenet
         if not args.pretrained:
@@ -123,7 +122,7 @@ class Encoder(nn.Module):
 
         return feature2x, feature4x, feature8x, feature16x, feature32x
 
-class PortrainNetMobileNetV2(nn.Module):
+class PortrainNetMobileNetV3(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -160,4 +159,3 @@ class PortrainNetMobileNetV2(nn.Module):
         boundary_logits = self.boundary_conv(up1x)
 
         return mask_logits, boundary_logits
-        

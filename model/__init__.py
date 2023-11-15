@@ -1,2 +1,2 @@
-from .portrain_net_mobilenetv2 import PortrainNetMobileNetV2
-from .portrain_net_mobilenetv3 import PortrainNetMobileNetV3
+from .portrait_net_mobilenetv2 import PortrainNetMobileNetV2
+from .portrait_net_mobilenetv3 import PortrainNetMobileNetV3

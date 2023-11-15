@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from torchvision.models import mobilenet_v3_large
+from torchvision.models import mobilenet_v2
+from torchvision.models.mobilenetv2 import InvertedResidual
 
 import numpy as np
         
@@ -47,6 +48,35 @@ class Upsample(nn.Module):
         output = self.upsample(x)
         return output
     
+class InvertedResidualAdapter(nn.Module):
+    def __init__(self, module: InvertedResidual):
+        super().__init__()
+        self.conv = module.conv
+        self.in_channels = module.conv[0][0].in_channels
+        self.out_channels = module.out_channels
+        self.use_res_connect = module.use_res_connect
+        for param in self.conv.parameters():
+            param.requires_grad = False
+        if self.use_res_connect:
+            self.adapter = nn.Conv2d(self.in_channels, self.in_channels, kernel_size=1, stride=1, padding=0, bias=False)
+
+    def forward(self, x):
+        if self.use_res_connect:
+            return self.conv(x) + self.adapter(x)
+        else:
+            return self.conv(x)
+
+def replace_residual_adapters(module: nn.Module):
+    for name, module in module.named_children():
+        if len(list(module.children())) > 0:
+            # compound module, go inside it
+            replace_residual_adapters(module)
+            
+        if isinstance(module, InvertedResidual):
+            adapter = InvertedResidualAdapter(module)
+            setattr(module, name, adapter)
+
+
 class Encoder(nn.Module):
     def __init__(self, args):
         '''
@@ -69,16 +99,21 @@ class Encoder(nn.Module):
         [14, 14]
         [14, 14]
         [14, 14]
+        [14, 14]
         [7, 7]
         [7, 7]
         [7, 7]
         [7, 7]
         '''
-        mobilenet = mobilenet_v3_large(pretrained=args.pretrained)
+        mobilenet = mobilenet_v2(pretrained=args.pretrained)
         if args.freeze:
             for param in mobilenet.parameters():
                 param.requires_grad = False
-    
+
+        if args.residual_adapters:
+            assert args.freeze
+            replace_residual_adapters(mobilenet)
+
         self.out_channels = []
 
         self.down2x = mobilenet.features[0:2]
@@ -90,11 +125,11 @@ class Encoder(nn.Module):
         self.down8x = mobilenet.features[4:7]
         self.out_channels.append(mobilenet.features[6].out_channels)
 
-        self.down16x = mobilenet.features[7:13]
-        self.out_channels.append(mobilenet.features[12].out_channels)
+        self.down16x = mobilenet.features[7:14]
+        self.out_channels.append(mobilenet.features[13].out_channels)
 
-        self.down32x = mobilenet.features[13:17]
-        self.out_channels.append(mobilenet.features[16].out_channels)
+        self.down32x = mobilenet.features[14:18]
+        self.out_channels.append(mobilenet.features[17].out_channels)
 
         del mobilenet
         if not args.pretrained:
@@ -122,7 +157,7 @@ class Encoder(nn.Module):
 
         return feature2x, feature4x, feature8x, feature16x, feature32x
 
-class PortrainNetMobileNetV3(nn.Module):
+class PortrainNetMobileNetV2(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -153,10 +188,9 @@ class PortrainNetMobileNetV3(nn.Module):
         up8x = self.upsample16x(self.d_block16x(feature16x + up16x))
         up4x = self.upsample8x(self.d_block8x(feature8x + up8x))
         up2x = self.upsample4x(self.d_block4x(feature4x + up4x))
-        up1x = self.upsample2x(self.d_block2x(feature2x + up2x))
+        up1x = self.upsample2x(self.d_block2x(up2x + feature2x))
 
         mask_logits = self.mask_conv(up1x)
         boundary_logits = self.boundary_conv(up1x)
 
         return mask_logits, boundary_logits
-        
