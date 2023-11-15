@@ -74,26 +74,29 @@ class Encoder(nn.Module):
         [7, 7]
         [7, 7]
         '''
-        mobilenetv2 = mobilenet_v3_large(pretrained=args.pretrained)
-
+        mobilenet = mobilenet_v3_large(pretrained=args.pretrained)
+        if args.freeze:
+            for param in mobilenet.parameters():
+                param.requires_grad = False
+    
         self.out_channels = []
 
-        self.down2x = mobilenetv2.features[0:2]
-        self.out_channels.append(mobilenetv2.features[1].out_channels)
+        self.down2x = mobilenet.features[0:2]
+        self.out_channels.append(mobilenet.features[1].out_channels)
 
-        self.down4x = mobilenetv2.features[2:4]
-        self.out_channels.append(mobilenetv2.features[3].out_channels)
+        self.down4x = mobilenet.features[2:4]
+        self.out_channels.append(mobilenet.features[3].out_channels)
 
-        self.down8x = mobilenetv2.features[4:7]
-        self.out_channels.append(mobilenetv2.features[6].out_channels)
+        self.down8x = mobilenet.features[4:7]
+        self.out_channels.append(mobilenet.features[6].out_channels)
 
-        self.down16x = mobilenetv2.features[7:13]
-        self.out_channels.append(mobilenetv2.features[12].out_channels)
+        self.down16x = mobilenet.features[7:13]
+        self.out_channels.append(mobilenet.features[12].out_channels)
 
-        self.down32x = mobilenetv2.features[13:17]
-        self.out_channels.append(mobilenetv2.features[16].out_channels)
+        self.down32x = mobilenet.features[13:17]
+        self.out_channels.append(mobilenet.features[16].out_channels)
 
-        del mobilenetv2
+        del mobilenet
         if not args.pretrained:
             self.reset_parameters()
 
@@ -128,11 +131,11 @@ class PortrainNetMobileNetV3(nn.Module):
         self.encoder = Encoder(args)
         self.out_channels = self.encoder.out_channels
 
-        self.d_block32x = DBlock(self.out_channels[4], self.out_channels[3], activation=nn.Hardswish)
-        self.d_block16x = DBlock(self.out_channels[3], self.out_channels[2], activation=nn.Hardswish)
-        self.d_block8x = DBlock(self.out_channels[2], self.out_channels[1], activation=nn.Hardswish)
-        self.d_block4x = DBlock(self.out_channels[1], self.out_channels[0], activation=nn.Hardswish)
-        self.d_block2x = DBlock(self.out_channels[0], self.out_channels[0], activation=nn.Hardswish)
+        self.d_block32x = DBlock(self.out_channels[4], self.out_channels[3])
+        self.d_block16x = DBlock(self.out_channels[3], self.out_channels[2])
+        self.d_block8x = DBlock(self.out_channels[2], self.out_channels[1])
+        self.d_block4x = DBlock(self.out_channels[1], self.out_channels[0])
+        self.d_block2x = DBlock(self.out_channels[0], self.out_channels[0])
 
         self.upsample32x = Upsample(self.out_channels[3], self.out_channels[3])
         self.upsample16x = Upsample(self.out_channels[2], self.out_channels[2])

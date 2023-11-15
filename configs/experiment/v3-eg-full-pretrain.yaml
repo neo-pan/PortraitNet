@@ -5,17 +5,17 @@
 
 defaults:
   - override /data: eg1800
-  - override /model: mobilenetv2
+  - override /model: mobilenetv3
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["eg1800", "mobilenetv2", "not_pretrained", "boundary_loss", "consistency_loss"]
+tags: ["eg1800", "mobilenetv3", "boundary_loss", "consistency_loss"]
 
 trainer:
   min_epochs: 1
-  max_epochs: 2000
+  max_epochs: 500
   check_val_every_n_epoch: 10
 
 model:
@@ -23,6 +23,7 @@ model:
   use_boundary_loss: true
   use_consistency_loss: true
   compile: true
+  freeze: true
 
 data:
   batch_size: 64

@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.utils.data as data
 
 import lightning as L
+from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from torchmetrics.classification import BinaryJaccardIndex
 
 from model import PortrainNetMobileNetV2, PortrainNetMobileNetV3
@@ -30,6 +31,8 @@ class PortraitNetModule(L.LightningModule):
 
         self.val_acc = BinaryJaccardIndex(threshold=0.5)
         self.test_acc = BinaryJaccardIndex(threshold=0.5)
+
+        self.log_image_num = 2
 
     def setup(self, stage: str) -> None:
         if self.hparams.compile and stage == "fit":
@@ -93,16 +96,12 @@ class PortraitNetModule(L.LightningModule):
         else:
             loss_boundary = 0.0
 
-        if self.hparams.use_consistency_loss:
-            mask_ori_logits, boundary_ori_logits = self.forward(input_ori)
-            loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
-            loss_consistency = (
-                self.consistency_loss(mask_logits, mask_ori_logits.detach())
-                * self.hparams.consistency_weight
-            )
-        else:
-            loss_mask_ori = 0.0
-            loss_consistency = 0.0
+        mask_ori_logits, boundary_ori_logits = self.forward(input_ori)
+        loss_mask_ori = self.cross_entropy(mask_ori_logits, mask)
+        loss_consistency = (
+            self.consistency_loss(mask_logits, mask_ori_logits.detach())
+            * self.hparams.consistency_weight
+        )
 
         loss = loss_mask + loss_mask_ori + loss_boundary + loss_consistency
 
@@ -117,49 +116,18 @@ class PortraitNetModule(L.LightningModule):
         self.val_acc(mask_ori, mask)
         self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
         # log several images
-        if self.logger is not None and self.logger.experiment is not None:
-            if self.hparams.use_consistency_loss:
-                self.logger.experiment.add_images(
-                    f"val/mask_ori_{batch_idx}",
-                    self.mask2image(mask_ori_logits),
-                    self.current_epoch,
-                )
-                self.logger.experiment.add_images(
-                    f"val/boundary_ori_{batch_idx}",
-                    self.boundary2image(boundary_ori_logits),
-                    self.current_epoch,
-                )
-            if self.hparams.use_boundary_loss:
-                self.logger.experiment.add_images(
-                    f"val/boundary_aug_{batch_idx}",
-                    self.boundary2image(boundary_logits),
-                    self.current_epoch,
-                )
-            self.logger.experiment.add_images(
-                f"val/input_ori_{batch_idx}",
-                self.tensor2image(input_ori),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/input_aug_{batch_idx}",
-                self.tensor2image(input_aug),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/true_mask_{batch_idx}",
-                self.label2image(mask),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/mask_aug_{batch_idx}",
-                self.mask2image(mask_logits),
-                self.current_epoch,
-            )
-            self.logger.experiment.add_images(
-                f"val/true_boundary_{batch_idx}",
-                self.label2image(boundary),
-                self.current_epoch,
-            )
+        self.log_images(
+            "val",
+            input_ori,
+            input_aug,
+            mask,
+            mask_logits,
+            boundary,
+            boundary_logits,
+            mask_ori_logits,
+            boundary_ori_logits,
+            batch_idx,
+        )
 
         return loss
 
@@ -219,11 +187,140 @@ class PortraitNetModule(L.LightningModule):
     def lr_lambda(self, epoch):
         return 0.95 ** (epoch // 20)
 
+    def log_images(
+        self,
+        prefix,
+        input_ori,
+        input_aug,
+        mask,
+        mask_logits,
+        boundary,
+        boundary_logits,
+        mask_ori_logits,
+        boundary_ori_logits,
+        batch_idx,
+    ):
+        # log some images
+        if isinstance(self.logger, TensorBoardLogger):
+            if self.hparams.use_boundary_loss:
+                self.logger.experiment.add_images(
+                    f"{prefix}/boundary_ori_{batch_idx}",
+                    self.logits2image(boundary_ori_logits),
+                    self.current_epoch,
+                )
+                self.logger.experiment.add_images(
+                    f"{prefix}/boundary_aug_{batch_idx}",
+                    self.logits2image(boundary_logits),
+                    self.current_epoch,
+                )
+            self.logger.experiment.add_images(
+                f"{prefix}/mask_ori_{batch_idx}",
+                self.logits2image(mask_ori_logits),
+                self.current_epoch,
+            )
+            self.logger.experiment.add_images(
+                f"{prefix}/input_ori_{batch_idx}",
+                self.tensor2image(input_ori),
+                self.current_epoch,
+            )
+            self.logger.experiment.add_images(
+                f"{prefix}/input_aug_{batch_idx}",
+                self.tensor2image(input_aug),
+                self.current_epoch,
+            )
+            self.logger.experiment.add_images(
+                f"{prefix}/true_mask_{batch_idx}",
+                self.label2image(mask),
+                self.current_epoch,
+            )
+            self.logger.experiment.add_images(
+                f"{prefix}/mask_aug_{batch_idx}",
+                self.logits2image(mask_logits),
+                self.current_epoch,
+            )
+            self.logger.experiment.add_images(
+                f"{prefix}/true_boundary_{batch_idx}",
+                self.label2image(boundary),
+                self.current_epoch,
+            )
+        elif isinstance(self.logger, WandbLogger):
+            import wandb
+            from PIL import Image as PILImage
+
+            def concat_images(images):
+                if len(images.shape) != 4:
+                    raise ValueError("image shape should be (N, C, H, W)")
+                image_list = np.split(images, images.shape[0], axis=0)
+                image_list = [np.squeeze(image, axis=0) for image in image_list]
+                concatenated_image = np.concatenate(image_list, axis=-1).transpose((1, 2, 0))
+                image = wandb.Image(concatenated_image)
+                return image
+
+            if self.hparams.use_boundary_loss:
+                self.logger.experiment.log(
+                    {
+                        f"{prefix}/boundary_ori_{batch_idx}": concat_images(
+                            self.logits2image(boundary_ori_logits)
+                        )
+                    }
+                )
+                self.logger.experiment.log(
+                    {
+                        f"{prefix}/boundary_aug_{batch_idx}": concat_images(
+                            self.logits2image(boundary_logits)
+                        ),
+                    }
+                )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/mask_ori_{batch_idx}": concat_images(
+                        self.logits2image(mask_ori_logits)
+                    )
+                }
+            )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/input_ori_{batch_idx}": concat_images(
+                        self.tensor2image(input_ori)
+                    ),
+                }
+            )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/input_aug_{batch_idx}": concat_images(
+                        self.tensor2image(input_aug)
+                    ),
+                }
+            )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/true_mask_{batch_idx}": concat_images(
+                        self.label2image(mask)
+                    ),
+                }
+            )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/mask_aug_{batch_idx}": concat_images(
+                        self.logits2image(mask_logits)
+                    ),
+                }
+            )
+            self.logger.experiment.log(
+                {
+                    f"{prefix}/true_boundary_{batch_idx}": concat_images(
+                        self.label2image(boundary)
+                    ),
+                }
+            )
+
     def tensor2image(self, tensor):
         image = np.uint8(
             (
                 Anti_Normalize_Img(
-                    np.transpose(tensor[0:2].cpu().numpy(), (0, 2, 3, 1)),
+                    np.transpose(
+                        tensor[: self.log_image_num].cpu().numpy(), (0, 2, 3, 1)
+                    ),
                     scale=1,
                     mean=[103.94, 116.78, 123.68],
                     val=[0.017, 0.017, 0.017],
@@ -234,23 +331,16 @@ class PortraitNetModule(L.LightningModule):
         return image
 
     def label2image(self, mask):
-        mask = np.uint8(mask[0:2].cpu().numpy())
+        mask = np.uint8(mask[: self.log_image_num].cpu().numpy())
         mask[mask == 255] = 0
         mask = mask * 255
         return mask[:, None, ...]
 
-    def mask2image(self, logits):
-        mask = torch.softmax(logits[0:2], dim=1)[:, 1, :, :]
+    def logits2image(self, logits):
+        mask = torch.softmax(logits[: self.log_image_num], dim=1)[:, 1, :, :]
         mask = mask.detach().cpu().numpy()
         mask = mask * 255
         return mask[:, None, ...]
-
-    def boundary2image(self, logits):
-        # boundary = torch.softmax(logits[0:2], dim=1)[:, 0:1, :, :]
-        boundary = logits[0:2][:, 0, :, :]
-        boundary = boundary.detach().cpu().numpy()
-        boundary = boundary * 255
-        return boundary[:, None, ...]
 
 
 class PortraitDataModule(L.LightningDataModule):

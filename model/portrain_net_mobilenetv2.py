@@ -75,26 +75,29 @@ class Encoder(nn.Module):
         [7, 7]
         [7, 7]
         '''
-        mobilenetv2 = mobilenet_v2(pretrained=args.pretrained)
+        mobilenet = mobilenet_v2(pretrained=args.pretrained)
+        if args.freeze:
+            for param in mobilenet.parameters():
+                param.requires_grad = False
 
         self.out_channels = []
 
-        self.down2x = mobilenetv2.features[0:2]
-        self.out_channels.append(mobilenetv2.features[1].out_channels)
+        self.down2x = mobilenet.features[0:2]
+        self.out_channels.append(mobilenet.features[1].out_channels)
 
-        self.down4x = mobilenetv2.features[2:4]
-        self.out_channels.append(mobilenetv2.features[3].out_channels)
+        self.down4x = mobilenet.features[2:4]
+        self.out_channels.append(mobilenet.features[3].out_channels)
 
-        self.down8x = mobilenetv2.features[4:7]
-        self.out_channels.append(mobilenetv2.features[6].out_channels)
+        self.down8x = mobilenet.features[4:7]
+        self.out_channels.append(mobilenet.features[6].out_channels)
 
-        self.down16x = mobilenetv2.features[7:14]
-        self.out_channels.append(mobilenetv2.features[13].out_channels)
+        self.down16x = mobilenet.features[7:14]
+        self.out_channels.append(mobilenet.features[13].out_channels)
 
-        self.down32x = mobilenetv2.features[14:18]
-        self.out_channels.append(mobilenetv2.features[17].out_channels)
+        self.down32x = mobilenet.features[14:18]
+        self.out_channels.append(mobilenet.features[17].out_channels)
 
-        del mobilenetv2
+        del mobilenet
         if not args.pretrained:
             self.reset_parameters()
 

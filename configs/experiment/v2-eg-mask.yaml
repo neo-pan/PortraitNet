@@ -11,17 +11,17 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["eg1800", "mobilenetv2", "not_pretrained", "boundary_loss", "consistency_loss"]
+tags: ["eg1800", "mobilenetv2", "not_pretrained"]
 
 trainer:
   min_epochs: 1
-  max_epochs: 2000
+  max_epochs: 500
   check_val_every_n_epoch: 10
 
 model:
-  pretrained: true
-  use_boundary_loss: true
-  use_consistency_loss: true
+  pretrained: false
+  use_boundary_loss: false
+  use_consistency_loss: false
   compile: true
 
 data:

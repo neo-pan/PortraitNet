@@ -1,5 +1,4 @@
 --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/Triton-Nightly/pypi/simple
-# --extra-index-url https://download.pytorch.org/whl/cu118
 # --------- pytorch --------- #
 torch>=2.0.0
 torchvision>=0.15.0
@@ -18,7 +17,7 @@ tensorboard
 # neptune-client
 # mlflow
 # comet-ml
-# aim>=3.16.2  # no lower than 3.16.2, see https://github.com/aimhubio/aim/issues/2550
+# aim>=3.16.2
 
 # --------- others --------- #
 rich            # beautiful text formatting in terminal
